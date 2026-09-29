@@ -1,0 +1,12 @@
+# Model artifacts
+mnist_model.h5
+*.pyc
+__pycache__/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+venv/
