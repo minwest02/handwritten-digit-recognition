@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageGrab
 import numpy as np
 from model import predict_digit
 
@@ -122,8 +122,18 @@ class DigitRecognitionApp:
         Display prediction and confidence on UI.
         """
         try:
-            # Convert PIL image to grayscale
-            gray_image = self.image.convert('L')
+            # Get canvas position on screen
+            canvas_x = self.canvas.winfo_rootx()
+            canvas_y = self.canvas.winfo_rooty()
+            canvas_w = self.canvas.winfo_width()
+            canvas_h = self.canvas.winfo_height()
+
+            # Capture the actual drawn canvas from screen
+            bbox = (canvas_x, canvas_y, canvas_x + canvas_w, canvas_y + canvas_h)
+            captured_image = ImageGrab.grab(bbox=bbox)
+
+            # Convert to grayscale
+            gray_image = captured_image.convert('L')
 
             # Resize to 28x28 (MNIST format)
             resized = gray_image.resize((28, 28))
@@ -136,8 +146,8 @@ class DigitRecognitionApp:
             # After invert: black bg with white strokes (what MNIST expects)
             inverted_array = 255 - image_array
 
-            # Check if canvas is blank
-            if np.mean(inverted_array) < 5:  # If mostly black, canvas is empty
+            # Check if canvas is blank (look for any non-black pixels after invert)
+            if np.max(inverted_array) < 50:  # If no significant white strokes, canvas is empty
                 messagebox.showwarning("Empty Canvas", "Please draw a digit first!")
                 return
 

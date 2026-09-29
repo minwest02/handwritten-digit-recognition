@@ -2,43 +2,87 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+<!-- Created: 2026-09-29 22:53:00 -->
+
 ## Project Overview
 
-A Python desktop application for handwritten digit recognition. Users draw digits (0-9) on a Tkinter canvas, and the app predicts the digit using a CNN trained on MNIST. The model trains automatically on first run (5 epochs) and is saved to `mnist_model.h5` for fast subsequent launches.
+A multi-platform handwritten digit recognition application with shared ML model and separate platform implementations:
+- **Web version** (Flask web app with HTML5 canvas)
+- **Desktop version** (Tkinter GUI)
 
-## Architecture
+Users draw digits (0-9) and receive predictions from a CNN trained on MNIST. The model trains automatically on first run (5 epochs) and is cached to `mnist_model.h5` for fast subsequent launches.
 
-**Two-file modular design:**
+## Project Structure
 
-- **`model.py`** — All ML logic (no UI dependencies)
-  - `build_model()`: Builds CNN with Conv2D→MaxPool→Dense layers
-  - `train_model(epochs=5)`: Loads MNIST, trains, saves to `mnist_model.h5`
-  - `load_model()`: Loads pre-trained model or trains if missing; handles corrupted files
-  - `predict_digit(image_array)`: Takes 28×28 grayscale array, returns (digit, confidence)
+```
+/
+├── CLAUDE.md (this file - root guide)
+├── model.py (shared ML model - used by both versions)
+├── requirements.txt (shared core dependencies)
+├── mnist_model.h5 (shared trained model, generated at runtime)
+│
+├── desktop_version/
+│   ├── CLAUDE.md (desktop-specific guide)
+│   ├── main.py (Tkinter GUI)
+│   └── requirements.txt (desktop dependencies)
+│
+└── web_version/
+    ├── CLAUDE.md (web-specific guide)
+    ├── app.py (Flask server with /predict API)
+    ├── requirements.txt (web dependencies)
+    └── templates/
+        └── index.html (web UI with HTML5 canvas)
+```
 
-- **`main.py`** — Tkinter UI and application logic
-  - `DigitRecognitionApp`: Main class with canvas, buttons, results display
-  - Canvas: 280×280 white background, black brush for drawing
-  - Buttons: "Clear" (reset canvas), "Recognize" (run inference)
-  - Key detail: Uses `PIL.ImageGrab` to capture actual canvas pixels (not a mirror image)
-  - Color inversion: Canvas has white bg/black strokes; inverted to black bg/white strokes before MNIST inference
+## Shared Architecture
 
-**Data flow:** Draw → Capture canvas with ImageGrab → Convert to 28×28 grayscale → Invert colors → Predict → Display result
+**`model.py`** — ML model (used by both versions)
+- `build_model()`: Builds CNN with Conv2D→MaxPool→Dense layers
+- `train_model(epochs=5)`: Loads MNIST, trains, saves to `mnist_model.h5`
+- `load_model()`: Loads pre-trained model or trains if missing; handles corrupted files
+- `predict_digit(image_array)`: Takes 28×28 grayscale array, returns (digit, confidence)
+
+**Data flow (both versions):**
+1. User draws on canvas (280×280, white bg, black strokes)
+2. Capture/encode canvas image
+3. Convert to 28×28 grayscale
+4. Invert colors (white→black, black→white) for MNIST
+5. Call `predict_digit()` → get prediction
+6. Display result (digit + confidence)
+
+## Platform-Specific Details
+
+- **Desktop:** See `desktop_version/CLAUDE.md` for Tkinter implementation
+- **Web:** See `web_version/CLAUDE.md` for Flask + HTML5 Canvas implementation
 
 ## Commands
 
-**Run the app** (requires `tf-env` conda environment with TensorFlow):
+### Desktop Version
+
+**Run desktop app** (requires `tf-env` conda environment):
 ```bash
-cd /Users/youth/Desktop/VibeCoding/Study-01
+cd desktop_version
 /Users/youth/miniconda3/envs/tf-env/bin/python3 main.py
 ```
 
-**Install dependencies** (in tf-env):
+### Web Version
+
+**Run web app** (requires `tf-env` conda environment):
 ```bash
-pip install tensorflow numpy pillow
+cd web_version
+/Users/youth/miniconda3/envs/tf-env/bin/python3 app.py
+# Visit http://localhost:5000 in your browser
 ```
 
-**Check if model file exists** (will trigger training on first launch if missing):
+### Shared Setup
+
+**Install dependencies** (both versions use shared model):
+```bash
+conda activate tf-env
+pip install tensorflow numpy pillow flask
+```
+
+**Check if model file exists** (shared by both versions):
 ```bash
 ls -la mnist_model.h5
 ```
@@ -48,43 +92,52 @@ Training progress shows epochs, loss, and accuracy for all 5 epochs.
 
 ## Environment
 
-The project uses a conda environment `tf-env` with Python 3.11 and TensorFlow 2.16+. This is necessary because TensorFlow has strict compatibility requirements.
+The project uses a conda environment `tf-env` with Python 3.11 and TensorFlow 2.16+. Both versions (desktop and web) use the same environment.
 
 If you need to set up the environment from scratch:
 ```bash
 conda create -n tf-env python=3.11
 conda activate tf-env
-pip install tensorflow numpy pillow
+pip install tensorflow numpy pillow flask
 ```
 
 ## Critical Implementation Details
 
-1. **Canvas capture with ImageGrab:** The app uses `PIL.ImageGrab.grab(bbox)` to capture the actual Tkinter canvas pixels. This is essential because a mirror PIL Image buffer would not properly sync with the visual canvas. Without this, drawn strokes wouldn't be recognized.
+1. **Shared model logic:** Both web and desktop versions use the same `model.py` with identical preprocessing:
+   - Load/train MNIST model
+   - Cache to `mnist_model.h5`
+   - Handle missing or corrupted files
 
-2. **Color inversion for MNIST:** The canvas has white background with black strokes (user-friendly), but MNIST expects black background with white digits. The `recognize()` method inverts via `255 - image_array` before inference.
+2. **Color inversion for MNIST:** Canvas has white background with black strokes (user-friendly), but MNIST expects black background with white digits. Both versions invert via `255 - image_array` before inference.
 
-3. **Empty canvas detection:** Uses `np.max(inverted_array) < 50` to check if user actually drew something. This is more reliable than checking mean pixel value.
+3. **Empty canvas detection:** Uses `np.max(inverted_array) < 50` to verify user drew something. Same check in both versions.
 
-4. **Model persistence:** On first launch, training may take 2-3 minutes. The trained model is cached in `mnist_model.h5` (2.6 MB), so subsequent launches are instant. If the file gets corrupted, `load_model()` catches the exception and retrains automatically.
+4. **Platform differences:**
+   - **Desktop:** Uses `PIL.ImageGrab.grab(bbox)` to capture actual Tkinter canvas
+   - **Web:** Uses HTML5 Canvas API with JavaScript to capture drawing
 
-5. **Error handling:** The app shows messagebox alerts for:
-   - Empty canvas: "Please draw a digit first!"
-   - Any exception during inference: Shows error message
+5. **Model persistence:** On first launch, training may take 2-3 minutes and is cached to `mnist_model.h5`. Subsequent launches are instant.
 
 ## Testing
 
-Manual test procedure:
-1. Draw a digit (0-9) on the canvas
-2. Click "Recognize"
-3. Verify prediction and confidence score appear
-4. Click "Clear" and repeat with different digits
-5. On second run, verify model loads instantly (no retraining console output)
+**Desktop version:**
+1. Run `desktop_version/main.py`
+2. Draw digit on Tkinter canvas
+3. Click "Recognize"
+4. Verify prediction appears
 
-## Files
+**Web version:**
+1. Run `web_version/app.py`
+2. Open http://localhost:5000
+3. Draw digit on HTML5 canvas
+4. Click "Recognize"
+5. Verify prediction appears
 
-- `model.py` - ML model code (~95 lines)
-- `main.py` - Tkinter UI code (~165 lines)
-- `requirements.txt` - Dependencies
-- `.gitignore` - Excludes `mnist_model.h5` and Python artifacts
-- `docs/superpowers/specs/` - Design specification
+## Documentation
+
+- `model.py` - ML model code (~95 lines, shared)
+- `requirements.txt` - Shared core dependencies
+- `desktop_version/CLAUDE.md` - Desktop implementation guide
+- `web_version/CLAUDE.md` - Web implementation guide
+- `docs/superpowers/specs/` - Overall design specification
 - `docs/superpowers/plans/` - Implementation plan
