@@ -1,12 +1,5 @@
-# Model artifacts
-mnist_model.h5
-*.pyc
+.DS_Store
 __pycache__/
-
-# IDE
-.vscode/
-.idea/
-
-# Environment
-.env
-venv/
+*.pyc
+.venv/
+node_modules/
